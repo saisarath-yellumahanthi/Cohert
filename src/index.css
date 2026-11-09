@@ -1,0 +1,77 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg-primary: #FFFFFF;
+  --bg-surface: #FAFAFA;
+  --bg-elevated: #FFFFFF;
+  --text-primary: #262626;
+  --text-secondary: #737373;
+  --border-subtle: #DBDBDB;
+  --bubble-other: #EFEFEF;
+  --brand-purple: #833AB4;
+  --brand-pink: #FD1D1D;
+  --brand-orange: #FCB045;
+  --brand-gradient: linear-gradient(135deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%);
+  --font-logo: 'Pacifico', cursive;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Poppins', sans-serif;
+  --radius-card: 14px;
+  --radius-lg: 16px;
+}
+
+.dark {
+  --bg-primary: #000000;
+  --bg-surface: #121212;
+  --bg-elevated: #1A1A1A;
+  --text-primary: #F5F5F5;
+  --text-secondary: #A8A8A8;
+  --border-subtle: #262626;
+  --bubble-other: #262626;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-logo {
+  font-family: var(--font-logo);
+}
+
+.bg-cohert-gradient {
+  background: var(--brand-gradient);
+}
+
+.text-cohert-gradient {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@keyframes heartPop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.32);
+  }
+  70% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-heart-pop {
+  animation: heartPop 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}

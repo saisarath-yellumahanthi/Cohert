@@ -1,0 +1,548 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'saisarathpandu@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isCircleMember() {
+      return isVerified() && (
+        exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) ||
+        isAdmin()
+      );
+    }
+
+    // 3. Entity Validation Blueprints (No DB reads)
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['userId', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'createdAt']) &&
+        isValidId(data.userId) &&
+        data.userId == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidCircleConfig(data) {
+      return data.keys().hasAll(['circleId', 'inviteCode', 'memberCount', 'maxMembers', 'adminId', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['circleId', 'inviteCode', 'memberCount', 'maxMembers', 'adminId', 'createdAt', 'updatedAt']) &&
+        data.circleId is string && data.circleId.size() == 6 && data.circleId == 'cohert' &&
+        data.inviteCode is string && data.inviteCode.size() >= 4 && data.inviteCode.size() <= 32 && data.inviteCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.memberCount is int && data.memberCount >= 0 && data.memberCount <= 5 &&
+        data.maxMembers is int && data.maxMembers == 5 &&
+        isValidId(data.adminId) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'userId', 'circleId', 'name', 'avatarUrl', 'branch', 'year',
+          'skills', 'bio', 'profileCompleted', 'onboardingCompleted',
+          'onlineStatus', 'lastActiveAt', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId', 'circleId', 'name', 'avatarUrl', 'branch', 'year',
+          'skills', 'bio', 'profileCompleted', 'onboardingCompleted',
+          'onlineStatus', 'lastActiveAt', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.userId) &&
+        data.circleId is string && data.circleId.size() == 6 && data.circleId == 'cohert' &&
+        data.name is string && data.name.size() <= 80 &&
+        data.avatarUrl is string && data.avatarUrl.size() <= 500000 &&
+        data.branch is string && data.branch.size() <= 80 &&
+        data.year is string && data.year.size() <= 40 &&
+        data.skills is list && data.skills.size() <= 10 &&
+        (data.skills.size() == 0 || (data.skills[0] is string && data.skills[0].size() <= 40)) &&
+        data.bio is string && data.bio.size() <= 300 &&
+        data.profileCompleted is bool &&
+        data.onboardingCompleted is bool &&
+        data.onlineStatus is string && data.onlineStatus.size() <= 10 && data.onlineStatus in ['online', 'offline'] &&
+        data.lastActiveAt is timestamp &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['userId', 'circleId', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'circleId', 'email', 'createdAt']) &&
+        isValidId(data.userId) &&
+        data.userId == request.auth.uid &&
+        data.circleId is string && data.circleId.size() == 6 && data.circleId == 'cohert' &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll([
+          'authorId', 'authorName', 'authorAvatar', 'authorBranch',
+          'circleId', 'topic', 'postType', 'title', 'content',
+          'imageUrl', 'externalLink', 'deadlineDate', 'lookingForTeammates',
+          'likesCount', 'commentsCount', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'authorId', 'authorName', 'authorAvatar', 'authorBranch',
+          'circleId', 'topic', 'postType', 'title', 'content',
+          'imageUrl', 'externalLink', 'deadlineDate', 'lookingForTeammates',
+          'likesCount', 'commentsCount', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.authorId) &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+        data.authorAvatar is string && data.authorAvatar.size() <= 500000 &&
+        data.authorBranch is string && data.authorBranch.size() <= 80 &&
+        data.circleId is string && data.circleId.size() == 6 && data.circleId == 'cohert' &&
+        data.topic is string && data.topic.size() <= 20 && data.topic in ['studies', 'hackathons', 'internships', 'job_training', 'ideas'] &&
+        data.postType is string && data.postType.size() <= 20 && data.postType in ['standard', 'idea', 'opportunity', 'resource'] &&
+        data.title is string && data.title.size() <= 140 &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
+        data.imageUrl is string && data.imageUrl.size() <= 500000 &&
+        data.externalLink is string && data.externalLink.size() <= 500 &&
+        data.deadlineDate is string && data.deadlineDate.size() <= 40 &&
+        data.lookingForTeammates is bool &&
+        data.likesCount is int && data.likesCount >= 0 &&
+        data.commentsCount is int && data.commentsCount >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPostLike(data) {
+      return data.keys().hasAll(['postId', 'userId', 'createdAt']) &&
+        data.keys().hasOnly(['postId', 'userId', 'createdAt']) &&
+        isValidId(data.postId) &&
+        isValidId(data.userId) &&
+        data.userId == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidPostComment(data) {
+      return data.keys().hasAll(['postId', 'authorId', 'authorName', 'authorAvatar', 'text', 'createdAt']) &&
+        data.keys().hasOnly(['postId', 'authorId', 'authorName', 'authorAvatar', 'text', 'createdAt']) &&
+        isValidId(data.postId) &&
+        isValidId(data.authorId) &&
+        data.authorId == request.auth.uid &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+        data.authorAvatar is string && data.authorAvatar.size() <= 500000 &&
+        data.text is string && data.text.size() >= 1 && data.text.size() <= 500 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidBookmark(data) {
+      return data.keys().hasAll(['userId', 'postId', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'postId', 'createdAt']) &&
+        isValidId(data.userId) &&
+        data.userId == request.auth.uid &&
+        isValidId(data.postId) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidChatRoom(data) {
+      return data.keys().hasAll([
+          'circleId', 'chatType', 'name', 'creatorId', 'participantIds',
+          'lastMessageText', 'lastMessageSenderId', 'typingUserId', 'typingUserName',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'circleId', 'chatType', 'name', 'creatorId', 'participantIds',
+          'lastMessageText', 'lastMessageSenderId', 'typingUserId', 'typingUserName',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.circleId is string && data.circleId.size() == 6 && data.circleId == 'cohert' &&
+        data.chatType is string && data.chatType.size() <= 10 && data.chatType in ['direct', 'group'] &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        isValidId(data.creatorId) &&
+        data.participantIds is list && data.participantIds.size() >= 1 && data.participantIds.size() <= 5 &&
+        data.participantIds[0] is string && data.participantIds[0].size() <= 128 &&
+        data.lastMessageText is string && data.lastMessageText.size() <= 500 &&
+        data.lastMessageSenderId is string && data.lastMessageSenderId.size() <= 128 &&
+        data.typingUserId is string && data.typingUserId.size() <= 128 &&
+        data.typingUserName is string && data.typingUserName.size() <= 80 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll([
+          'chatId', 'senderId', 'senderName', 'senderAvatar',
+          'text', 'imageUrl', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'chatId', 'senderId', 'senderName', 'senderAvatar',
+          'text', 'imageUrl', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.chatId) &&
+        isValidId(data.senderId) &&
+        data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80 &&
+        data.senderAvatar is string && data.senderAvatar.size() <= 500000 &&
+        data.text is string && data.text.size() <= 1000 &&
+        data.imageUrl is string && data.imageUrl.size() <= 500000 &&
+        (data.text.size() > 0 || data.imageUrl.size() > 0) &&
+        data.status is string && data.status.size() <= 10 && data.status in ['sent', 'seen'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotificationItem(data) {
+      return data.keys().hasAll([
+          'recipientId', 'actorId', 'actorName', 'actorAvatar',
+          'type', 'targetId', 'message', 'read', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'recipientId', 'actorId', 'actorName', 'actorAvatar',
+          'type', 'targetId', 'message', 'read', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.recipientId) &&
+        isValidId(data.actorId) &&
+        data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 80 &&
+        data.actorAvatar is string && data.actorAvatar.size() <= 500000 &&
+        data.type is string && data.type.size() <= 20 && data.type in ['like', 'comment', 'message', 'teammate_request'] &&
+        isValidId(data.targetId) &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 250 &&
+        data.read is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Match Blocks (Strict Evaluation Order: Auth -> Static -> Relational; No DB reads in list)
+
+    // /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isVerified() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow list: if false;
+      allow create: if isVerified() &&
+        isValidId(adminId) &&
+        adminId == request.auth.uid &&
+        isValidAdminRecord(incoming()) &&
+        incoming().createdAt == request.time &&
+        (
+          request.auth.token.email == 'saisarathpandu@gmail.com' ||
+          !exists(/databases/$(database)/documents/circleConfig/cohert)
+        );
+      allow update, delete: if false;
+    }
+
+    // /circleConfig/{configId}
+    match /circleConfig/{configId} {
+      allow get: if isSignedIn() && isValidId(configId) && configId == 'cohert';
+      allow list: if false;
+      allow create: if isVerified() &&
+        isValidId(configId) &&
+        configId == 'cohert' &&
+        isValidCircleConfig(incoming()) &&
+        incoming().adminId == request.auth.uid &&
+        incoming().memberCount == 1 &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerified() &&
+        isValidId(configId) &&
+        configId == 'cohert' &&
+        isValidCircleConfig(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().adminId == existing().adminId &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          // Action: Member Join Increment (up to 5 members)
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['memberCount', 'updatedAt']) &&
+            incoming().memberCount == existing().memberCount + 1 &&
+            incoming().memberCount <= 5 &&
+            existsAfter(/databases/$(database)/documents/profiles/$(request.auth.uid))
+          )
+        );
+      allow delete: if false;
+    }
+
+    // /profiles/{userId}
+    match /profiles/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isCircleMember());
+      allow list: if isVerified() && existing().circleId == 'cohert';
+      allow create: if isVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUserProfile(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        getAfter(/databases/$(database)/documents/circleConfig/cohert).data.memberCount <= 5;
+      allow update: if isVerified() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          (
+            request.auth.uid == userId &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'avatarUrl', 'branch', 'year', 'skills', 'bio',
+              'profileCompleted', 'onboardingCompleted', 'onlineStatus',
+              'lastActiveAt', 'updatedAt'
+            ])
+          ) ||
+          isAdmin()
+        );
+      allow delete: if isVerified() && isValidId(userId) && isAdmin();
+    }
+
+    // /userPrivate/{userId} (PII Isolated Collection)
+    match /userPrivate/{userId} {
+      allow get: if isVerified() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isVerified() &&
+        (existing().userId == request.auth.uid || request.auth.token.email == 'saisarathpandu@gmail.com') &&
+        existing().circleId == 'cohert';
+      allow create: if isVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUserPrivateInfo(incoming()) &&
+        incoming().createdAt == request.time &&
+        existsAfter(/databases/$(database)/documents/profiles/$(request.auth.uid));
+      allow update: if false;
+      allow delete: if isVerified() && isValidId(userId) && isAdmin();
+    }
+
+    // /posts/{postId}
+    match /posts/{postId} {
+      allow get: if isVerified() && isValidId(postId) && existing().circleId == 'cohert' && isCircleMember();
+      allow list: if isVerified() && existing().circleId == 'cohert';
+      allow create: if isVerified() &&
+        isValidId(postId) &&
+        isValidPost(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().likesCount == 0 &&
+        incoming().commentsCount == 0 &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isCircleMember();
+      allow update: if isVerified() &&
+        isValidId(postId) &&
+        isValidPost(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isCircleMember() && (
+          // Action 1: Author edits post content
+          (
+            existing().authorId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'content', 'topic', 'externalLink', 'deadlineDate',
+              'lookingForTeammates', 'updatedAt'
+            ])
+          ) ||
+          // Action 2: Atomic Like Counter Sync
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'updatedAt']) &&
+            (
+              (
+                incoming().likesCount == existing().likesCount + 1 &&
+                existsAfter(/databases/$(database)/documents/posts/$(postId)/likes/$(request.auth.uid))
+              ) ||
+              (
+                incoming().likesCount == existing().likesCount - 1 &&
+                !existsAfter(/databases/$(database)/documents/posts/$(postId)/likes/$(request.auth.uid))
+              )
+            )
+          ) ||
+          // Action 3: Comment Counter Increment
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) &&
+            incoming().commentsCount == existing().commentsCount + 1
+          ) ||
+          isAdmin()
+        );
+      allow delete: if isVerified() && isValidId(postId) && isCircleMember() && (existing().authorId == request.auth.uid || isAdmin());
+
+      // Subcollection: /posts/{postId}/likes/{likeId}
+      match /likes/{likeId} {
+        allow get: if isVerified() && isValidId(postId) && isValidId(likeId) &&
+          isCircleMember() &&
+          get(/databases/$(database)/documents/posts/$(postId)).data.circleId == 'cohert';
+        allow list: if isVerified() && existing().postId == postId;
+        allow create: if isVerified() &&
+          isValidId(postId) &&
+          isValidId(likeId) &&
+          likeId == request.auth.uid &&
+          isValidPostLike(incoming()) &&
+          incoming().postId == postId &&
+          incoming().createdAt == request.time &&
+          isCircleMember() &&
+          get(/databases/$(database)/documents/posts/$(postId)).data.circleId == 'cohert';
+        allow update: if false;
+        allow delete: if isVerified() &&
+          isValidId(postId) &&
+          isValidId(likeId) &&
+          likeId == request.auth.uid &&
+          existing().userId == request.auth.uid &&
+          isCircleMember();
+      }
+
+      // Subcollection: /posts/{postId}/comments/{commentId}
+      match /comments/{commentId} {
+        allow get: if isVerified() && isValidId(postId) && isValidId(commentId) &&
+          isCircleMember() &&
+          get(/databases/$(database)/documents/posts/$(postId)).data.circleId == 'cohert';
+        allow list: if isVerified() && existing().postId == postId;
+        allow create: if isVerified() &&
+          isValidId(postId) &&
+          isValidId(commentId) &&
+          isValidPostComment(incoming()) &&
+          incoming().postId == postId &&
+          incoming().createdAt == request.time &&
+          isCircleMember() &&
+          get(/databases/$(database)/documents/posts/$(postId)).data.circleId == 'cohert';
+        allow update: if false;
+        allow delete: if isVerified() &&
+          isValidId(postId) &&
+          isValidId(commentId) &&
+          isCircleMember() &&
+          (existing().authorId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // /bookmarks/{bookmarkId}
+    match /bookmarks/{bookmarkId} {
+      allow get: if isVerified() && isValidId(bookmarkId) && existing().userId == request.auth.uid && isCircleMember();
+      allow list: if isVerified() && existing().userId == request.auth.uid;
+      allow create: if isVerified() &&
+        isValidId(bookmarkId) &&
+        isValidBookmark(incoming()) &&
+        incoming().createdAt == request.time &&
+        isCircleMember() &&
+        exists(/databases/$(database)/documents/posts/$(incoming().postId));
+      allow update: if false;
+      allow delete: if isVerified() && isValidId(bookmarkId) && existing().userId == request.auth.uid && isCircleMember();
+    }
+
+    // /chats/{chatId}
+    match /chats/{chatId} {
+      allow get: if isVerified() && isValidId(chatId) && request.auth.uid in existing().participantIds && isCircleMember();
+      allow list: if isVerified() && request.auth.uid in existing().participantIds;
+      allow create: if isVerified() &&
+        isValidId(chatId) &&
+        isValidChatRoom(incoming()) &&
+        incoming().creatorId == request.auth.uid &&
+        request.auth.uid in incoming().participantIds &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isCircleMember();
+      allow update: if isVerified() &&
+        isValidId(chatId) &&
+        isValidChatRoom(incoming()) &&
+        incoming().creatorId == existing().creatorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        request.auth.uid in existing().participantIds &&
+        isCircleMember() && (
+          // Action 1: Update last message preview or typing status
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'lastMessageText', 'lastMessageSenderId', 'typingUserId', 'typingUserName', 'updatedAt'
+          ]) ||
+          // Action 2: Add circle member to group chat
+          (
+            existing().chatType == 'group' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['participantIds', 'name', 'updatedAt'])
+          ) ||
+          isAdmin()
+        );
+      allow delete: if isVerified() && isValidId(chatId) && isCircleMember() && (existing().creatorId == request.auth.uid || isAdmin());
+
+      // Subcollection: /chats/{chatId}/messages/{messageId}
+      match /messages/{messageId} {
+        allow get: if isVerified() && isValidId(chatId) && isValidId(messageId) &&
+          isCircleMember() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+        allow list: if isVerified() && existing().chatId == chatId;
+        allow create: if isVerified() &&
+          isValidId(chatId) &&
+          isValidId(messageId) &&
+          isValidChatMessage(incoming()) &&
+          incoming().chatId == chatId &&
+          incoming().senderId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isCircleMember() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+        allow update: if isVerified() &&
+          isValidId(chatId) &&
+          isValidId(messageId) &&
+          isValidChatMessage(incoming()) &&
+          incoming().senderId == existing().senderId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          isCircleMember() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds && (
+            // Action: Mark message as seen
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+              existing().status == 'sent' &&
+              incoming().status == 'seen'
+            ) ||
+            isAdmin()
+          );
+        allow delete: if isVerified() &&
+          isValidId(chatId) &&
+          isValidId(messageId) &&
+          isCircleMember() &&
+          (existing().senderId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // /notifications/{notificationId}
+    match /notifications/{notificationId} {
+      allow get: if isVerified() && isValidId(notificationId) && existing().recipientId == request.auth.uid && isCircleMember();
+      allow list: if isVerified() && existing().recipientId == request.auth.uid;
+      allow create: if isVerified() &&
+        isValidId(notificationId) &&
+        isValidNotificationItem(incoming()) &&
+        incoming().actorId == request.auth.uid &&
+        incoming().read == false &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isCircleMember() &&
+        exists(/databases/$(database)/documents/profiles/$(incoming().recipientId));
+      allow update: if isVerified() &&
+        isValidId(notificationId) &&
+        isValidNotificationItem(incoming()) &&
+        existing().recipientId == request.auth.uid &&
+        incoming().recipientId == existing().recipientId &&
+        incoming().actorId == existing().actorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isCircleMember() && (
+          // Action: Recipient marks notification as read
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt']) &&
+            existing().read == false &&
+            incoming().read == true
+          ) ||
+          isAdmin()
+        );
+      allow delete: if isVerified() && isValidId(notificationId) && isCircleMember() && (existing().recipientId == request.auth.uid || isAdmin());
+    }
+  }
+}

@@ -1,0 +1,689 @@
+{
+  "entities": {
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted admin registry document for Cohert circle administrator.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the admin user."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when admin was registered."
+        }
+      },
+      "required": ["userId", "createdAt"]
+    },
+    "CircleConfig": {
+      "title": "CircleConfig",
+      "description": "Global configuration for the private 5-member Cohert circle including invite code and member counter.",
+      "type": "object",
+      "properties": {
+        "circleId": {
+          "type": "string",
+          "enum": ["cohert"],
+          "description": "Fixed circle identifier."
+        },
+        "inviteCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Required invite code for the 4 friends to join."
+        },
+        "memberCount": {
+          "type": "integer",
+          "description": "Current number of active members (1 to 5)."
+        },
+        "maxMembers": {
+          "type": "integer",
+          "description": "Maximum allowed members (always 5)."
+        },
+        "adminId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the circle admin."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp."
+        }
+      },
+      "required": ["circleId", "inviteCode", "memberCount", "maxMembers", "adminId", "createdAt", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Non-PII member profile shared within the 5-friend Cohert circle.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the member."
+        },
+        "circleId": {
+          "type": "string",
+          "enum": ["cohert"],
+          "description": "Fixed circle identifier."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 80,
+          "description": "Display name of the member."
+        },
+        "avatarUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500000,
+          "description": "Profile photo URL or data URL."
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 80,
+          "description": "College branch or major."
+        },
+        "year": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Graduation or study year."
+        },
+        "skills": {
+          "type": "array",
+          "description": "List of up to 10 skill strings."
+        },
+        "bio": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 300,
+          "description": "Short personal bio."
+        },
+        "profileCompleted": {
+          "type": "boolean",
+          "description": "Whether the member has completed their initial profile setup."
+        },
+        "onboardingCompleted": {
+          "type": "boolean",
+          "description": "Whether the member has completed the 3-slide welcome onboarding."
+        },
+        "onlineStatus": {
+          "type": "string",
+          "enum": ["online", "offline"],
+          "description": "Real-time presence status."
+        },
+        "lastActiveAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last activity."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when member joined."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile update."
+        }
+      },
+      "required": [
+        "userId",
+        "circleId",
+        "name",
+        "avatarUrl",
+        "branch",
+        "year",
+        "skills",
+        "bio",
+        "profileCompleted",
+        "onboardingCompleted",
+        "onlineStatus",
+        "lastActiveAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII record containing member email address, readable only by owner or circle admin.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the member."
+        },
+        "circleId": {
+          "type": "string",
+          "enum": ["cohert"],
+          "description": "Fixed circle identifier."
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120,
+          "description": "Member email address."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account registration timestamp."
+        }
+      },
+      "required": ["userId", "circleId", "email", "createdAt"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "Community feed post tagged with a topic and optional opportunity or resource fields.",
+      "type": "object",
+      "properties": {
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the post creator."
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Display name of the author."
+        },
+        "authorAvatar": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500000,
+          "description": "Author avatar URL."
+        },
+        "authorBranch": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 80,
+          "description": "Author branch/year subtitle."
+        },
+        "circleId": {
+          "type": "string",
+          "enum": ["cohert"],
+          "description": "Circle identifier."
+        },
+        "topic": {
+          "type": "string",
+          "enum": ["studies", "hackathons", "internships", "job_training", "ideas"],
+          "description": "Required topic channel tag."
+        },
+        "postType": {
+          "type": "string",
+          "enum": ["standard", "idea", "opportunity", "resource"],
+          "description": "Post format type."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 140,
+          "description": "Optional title for idea, opportunity, or resource posts."
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Post caption or body text."
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500000,
+          "description": "Optional post image URL or compressed data URL."
+        },
+        "externalLink": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500,
+          "description": "Optional URL for opportunities or study resources."
+        },
+        "deadlineDate": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Optional ISO date string for opportunity deadlines."
+        },
+        "lookingForTeammates": {
+          "type": "boolean",
+          "description": "Whether the opportunity post is looking for teammates."
+        },
+        "likesCount": {
+          "type": "integer",
+          "description": "Count of likes on the post."
+        },
+        "commentsCount": {
+          "type": "integer",
+          "description": "Count of comments on the post."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp."
+        }
+      },
+      "required": [
+        "authorId",
+        "authorName",
+        "authorAvatar",
+        "authorBranch",
+        "circleId",
+        "topic",
+        "postType",
+        "title",
+        "content",
+        "imageUrl",
+        "externalLink",
+        "deadlineDate",
+        "lookingForTeammates",
+        "likesCount",
+        "commentsCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PostLike": {
+      "title": "PostLike",
+      "description": "Individual member like record in a post subcollection.",
+      "type": "object",
+      "properties": {
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Parent post ID."
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the member who liked the post."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of like."
+        }
+      },
+      "required": ["postId", "userId", "createdAt"]
+    },
+    "PostComment": {
+      "title": "PostComment",
+      "description": "Comment left by a circle member on a post.",
+      "type": "object",
+      "properties": {
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Parent post ID."
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of comment author."
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Display name of comment author."
+        },
+        "authorAvatar": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500000,
+          "description": "Avatar of comment author."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Comment body text."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of comment."
+        }
+      },
+      "required": ["postId", "authorId", "authorName", "authorAvatar", "text", "createdAt"]
+    },
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "Saved post bookmark owned by a member.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner UID."
+        },
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Saved post ID."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when bookmarked."
+        }
+      },
+      "required": ["userId", "postId", "createdAt"]
+    },
+    "ChatRoom": {
+      "title": "ChatRoom",
+      "description": "Direct 1-to-1 or group chat thread among circle members.",
+      "type": "object",
+      "properties": {
+        "circleId": {
+          "type": "string",
+          "enum": ["cohert"],
+          "description": "Circle identifier."
+        },
+        "chatType": {
+          "type": "string",
+          "enum": ["direct", "group"],
+          "description": "Direct 1-on-1 or group chat."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Chat room title."
+        },
+        "creatorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of chat creator."
+        },
+        "participantIds": {
+          "type": "array",
+          "description": "Bounded list of up to 5 member UIDs in the chat."
+        },
+        "lastMessageText": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500,
+          "description": "Preview of latest message."
+        },
+        "lastMessageSenderId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "description": "UID of latest message sender."
+        },
+        "typingUserId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "description": "UID of member currently typing."
+        },
+        "typingUserName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 80,
+          "description": "Display name of member currently typing."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Latest activity server timestamp."
+        }
+      },
+      "required": [
+        "circleId",
+        "chatType",
+        "name",
+        "creatorId",
+        "participantIds",
+        "lastMessageText",
+        "lastMessageSenderId",
+        "typingUserId",
+        "typingUserName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Real-time message inside a chat room subcollection.",
+      "type": "object",
+      "properties": {
+        "chatId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Parent chat room ID."
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of message sender."
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Display name of sender."
+        },
+        "senderAvatar": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500000,
+          "description": "Avatar of sender."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1000,
+          "description": "Message text content."
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500000,
+          "description": "Optional shared image URL or data URL."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["sent", "seen"],
+          "description": "Delivery/read status."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Status update server timestamp."
+        }
+      },
+      "required": [
+        "chatId",
+        "senderId",
+        "senderName",
+        "senderAvatar",
+        "text",
+        "imageUrl",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "Real activity notification for likes, comments, messages, and teammate requests.",
+      "type": "object",
+      "properties": {
+        "recipientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of member receiving the notification."
+        },
+        "actorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of member who triggered the notification."
+        },
+        "actorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Name of actor."
+        },
+        "actorAvatar": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500000,
+          "description": "Avatar of actor."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["like", "comment", "message", "teammate_request"],
+          "description": "Activity type."
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Related post or chat ID."
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250,
+          "description": "Human-readable notification text."
+        },
+        "read": {
+          "type": "boolean",
+          "description": "Whether the notification has been read."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Read status update timestamp."
+        }
+      },
+      "required": [
+        "recipientId",
+        "actorId",
+        "actorName",
+        "actorAvatar",
+        "type",
+        "targetId",
+        "message",
+        "read",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted admin registry for Cohert circle administrator."
+    },
+    "/circleConfig/{configId}": {
+      "schema": { "$ref": "#/entities/CircleConfig" },
+      "description": "Singleton circle configuration at /circleConfig/cohert."
+    },
+    "/profiles/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Non-PII member profiles visible only to authenticated circle members."
+    },
+    "/userPrivate/{userId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated PII records containing member email addresses, restricted to owner and admin."
+    },
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "Circle feed posts tagged by topic and postType."
+    },
+    "/posts/{postId}/likes/{likeId}": {
+      "schema": { "$ref": "#/entities/PostLike" },
+      "description": "Subcollection of likes under each post."
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/PostComment" },
+      "description": "Subcollection of comments under each post."
+    },
+    "/bookmarks/{bookmarkId}": {
+      "schema": { "$ref": "#/entities/Bookmark" },
+      "description": "Saved post bookmarks owned by each user."
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "#/entities/ChatRoom" },
+      "description": "Direct and group chat rooms among circle members."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Real-time messages inside a chat room."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "Activity notifications scoped to recipientId."
+    }
+  }
+}

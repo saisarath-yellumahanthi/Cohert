@@ -1,0 +1,6 @@
+{
+  "name": "Cohert",
+  "description": "A private community and chat app for a closed circle of 5 college friends to collaborate on studies, hackathons, internships, and job training.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
