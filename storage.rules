@@ -1,0 +1,90 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper: Only authenticated Cohert members
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: Enforce 15 MB max file size
+    function isWithinSizeLimit() {
+      return request.resource != null &&
+        request.resource.size > 0 &&
+        request.resource.size <= 15 * 1024 * 1024;
+    }
+
+    // Helper: Block executable file names (.exe, .bat, .sh, .apk, .js, .msi, .cmd, .com, .scr, .ps1, .vbs, .jar)
+    function isSafeFileName(fileName) {
+      return !fileName.lower().matches('.*\\.(exe|bat|sh|apk|js|mjs|cjs|cmd|com|msi|scr|ps1|vbs|jar|dmg|app|bin)$');
+    }
+
+    // Helper: Allowed content types for audio messages
+    function isAllowedAudioContentType() {
+      return request.resource != null &&
+        request.resource.contentType != null &&
+        (
+          request.resource.contentType.matches('audio/.*') ||
+          request.resource.contentType == 'video/mp4' ||
+          request.resource.contentType == 'application/octet-stream'
+        );
+    }
+
+    // Helper: Allowed content types for file attachments (PDF, DOC/DOCX, PPT/PPTX, XLS/XLSX, TXT, ZIP, CSV, Images)
+    function isAllowedAttachmentContentType() {
+      return request.resource != null &&
+        request.resource.contentType != null &&
+        (
+          request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType == 'application/pdf' ||
+          request.resource.contentType == 'text/plain' ||
+          request.resource.contentType == 'text/csv' ||
+          request.resource.contentType == 'application/csv' ||
+          request.resource.contentType == 'application/zip' ||
+          request.resource.contentType == 'application/x-zip-compressed' ||
+          request.resource.contentType == 'application/msword' ||
+          request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+          request.resource.contentType == 'application/vnd.ms-powerpoint' ||
+          request.resource.contentType == 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+          request.resource.contentType == 'application/vnd.ms-excel' ||
+          request.resource.contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          request.resource.contentType == 'application/octet-stream'
+        );
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Chat Audio Messages: /chats/{chatId}/audio/{fileName}
+    match /chats/{chatId}/audio/{fileName} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        isWithinSizeLimit() &&
+        isSafeFileName(fileName) &&
+        isAllowedAudioContentType();
+      allow delete: if isSignedIn();
+    }
+
+    // Chat File Attachments: /chats/{chatId}/files/{messageId}/{fileName}
+    match /chats/{chatId}/files/{messageId}/{fileName} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        isWithinSizeLimit() &&
+        isSafeFileName(fileName) &&
+        isAllowedAttachmentContentType();
+      allow delete: if isSignedIn();
+    }
+
+    // Post File Attachments: /posts/{postId}/files/{fileName}
+    match /posts/{postId}/files/{fileName} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        isWithinSizeLimit() &&
+        isSafeFileName(fileName) &&
+        isAllowedAttachmentContentType();
+      allow delete: if isSignedIn();
+    }
+  }
+}

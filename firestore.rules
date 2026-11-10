@@ -109,7 +109,7 @@ service cloud.firestore {
         data.keys().hasOnly([
           'authorId', 'authorName', 'authorAvatar', 'authorBranch',
           'circleId', 'topic', 'postType', 'title', 'content',
-          'imageUrl', 'externalLink', 'deadlineDate', 'lookingForTeammates',
+          'imageUrl', 'attachments', 'externalLink', 'deadlineDate', 'lookingForTeammates',
           'likesCount', 'commentsCount', 'createdAt', 'updatedAt'
         ]) &&
         isValidId(data.authorId) &&
@@ -122,6 +122,7 @@ service cloud.firestore {
         data.title is string && data.title.size() <= 140 &&
         data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
         data.imageUrl is string && data.imageUrl.size() <= 500000 &&
+        (!('attachments' in data) || (data.attachments is list && data.attachments.size() <= 10 && (data.attachments.size() == 0 || data.attachments[0] is map))) &&
         data.externalLink is string && data.externalLink.size() <= 500 &&
         data.deadlineDate is string && data.deadlineDate.size() <= 40 &&
         data.lookingForTeammates is bool &&
@@ -193,7 +194,8 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'chatId', 'senderId', 'senderName', 'senderAvatar',
-          'text', 'imageUrl', 'status', 'createdAt', 'updatedAt'
+          'text', 'imageUrl', 'audioUrl', 'audioDuration', 'audioMimeType', 'attachments',
+          'status', 'createdAt', 'updatedAt'
         ]) &&
         isValidId(data.chatId) &&
         isValidId(data.senderId) &&
@@ -201,7 +203,16 @@ service cloud.firestore {
         data.senderAvatar is string && data.senderAvatar.size() <= 500000 &&
         data.text is string && data.text.size() <= 1000 &&
         data.imageUrl is string && data.imageUrl.size() <= 500000 &&
-        (data.text.size() > 0 || data.imageUrl.size() > 0) &&
+        (!('audioUrl' in data) || (data.audioUrl is string && data.audioUrl.size() <= 500000)) &&
+        (!('audioDuration' in data) || (data.audioDuration is number && data.audioDuration >= 0 && data.audioDuration <= 300)) &&
+        (!('audioMimeType' in data) || (data.audioMimeType is string && data.audioMimeType.size() <= 80)) &&
+        (!('attachments' in data) || (data.attachments is list && data.attachments.size() <= 10 && (data.attachments.size() == 0 || data.attachments[0] is map))) &&
+        (
+          data.text.size() > 0 ||
+          data.imageUrl.size() > 0 ||
+          ('audioUrl' in data && data.audioUrl.size() > 0) ||
+          ('attachments' in data && data.attachments.size() > 0)
+        ) &&
         data.status is string && data.status.size() <= 10 && data.status in ['sent', 'seen'] &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;

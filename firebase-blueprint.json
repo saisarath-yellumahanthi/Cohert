@@ -256,6 +256,10 @@
           "maxLength": 500000,
           "description": "Optional post image URL or compressed data URL."
         },
+        "attachments": {
+          "type": "array",
+          "description": "Optional bounded list of up to 10 file attachment metadata objects."
+        },
         "externalLink": {
           "type": "string",
           "minLength": 0,
@@ -533,6 +537,26 @@
           "minLength": 0,
           "maxLength": 500000,
           "description": "Optional shared image URL or data URL."
+        },
+        "audioUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500000,
+          "description": "Optional Firebase Storage URL for voice message."
+        },
+        "audioDuration": {
+          "type": "number",
+          "description": "Optional voice message duration in seconds (max 300)."
+        },
+        "audioMimeType": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 80,
+          "description": "Optional audio MIME type."
+        },
+        "attachments": {
+          "type": "array",
+          "description": "Optional bounded list of up to 10 file attachment metadata objects."
         },
         "status": {
           "type": "string",

@@ -1,12 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  formatAudioDuration,
   formatDeadlineCountdown,
+  formatFileSize,
   formatPresenceStatus,
   formatRelativeTime,
   getDirectChatId,
   getInitials,
+  getNextPlaybackSpeed,
+  MAX_FILE_SIZE_BYTES,
   sanitizeString,
+  validateAttachmentFile,
   validateCircleCapacity,
   validateInviteCode,
   validateInviteCodeFormat
@@ -90,4 +95,46 @@ test('formatRelativeTime formats timestamps accurately', () => {
   assert.equal(formatRelativeTime(now - 5 * 60 * 1000, now), '5m ago');
   assert.equal(formatRelativeTime(now - 3 * 3600 * 1000, now), '3h ago');
   assert.equal(formatRelativeTime(now - 2 * 86400 * 1000, now), '2d ago');
+});
+
+test('validateAttachmentFile allows documents/images up to 15 MB and blocks executables', () => {
+  const validPdf = validateAttachmentFile({ name: 'Resume_2026.pdf', size: 1024 * 500 });
+  assert.equal(validPdf.valid, true);
+  assert.equal(validPdf.isPdf, true);
+  assert.equal(validPdf.extension, 'pdf');
+
+  const validDocx = validateAttachmentFile({ name: 'Hackathon_Pitch.docx', size: 2 * 1024 * 1024 });
+  assert.equal(validDocx.valid, true);
+
+  const blockedExe = validateAttachmentFile({ name: 'installer.exe', size: 1024 });
+  assert.equal(blockedExe.valid, false);
+  assert.ok(blockedExe.error?.includes('blocked for security'));
+
+  const blockedJs = validateAttachmentFile({ name: 'script.js', size: 1024 });
+  assert.equal(blockedJs.valid, false);
+  assert.ok(blockedJs.error?.includes('blocked for security'));
+
+  const blockedApk = validateAttachmentFile({ name: 'app.apk', size: 1024 });
+  assert.equal(blockedApk.valid, false);
+
+  const oversizedZip = validateAttachmentFile({
+    name: 'dataset.zip',
+    size: MAX_FILE_SIZE_BYTES + 1024
+  });
+  assert.equal(oversizedZip.valid, false);
+  assert.ok(oversizedZip.error?.includes('15 MB'));
+});
+
+test('formatFileSize, formatAudioDuration, and getNextPlaybackSpeed work accurately', () => {
+  assert.equal(formatFileSize(500), '500 B');
+  assert.equal(formatFileSize(2048), '2.0 KB');
+  assert.equal(formatFileSize(3.5 * 1024 * 1024), '3.5 MB');
+
+  assert.equal(formatAudioDuration(5), '0:05');
+  assert.equal(formatAudioDuration(85), '1:25');
+  assert.equal(formatAudioDuration(360), '5:00'); // Clamped to max 5 minutes
+
+  assert.equal(getNextPlaybackSpeed(1), 1.5);
+  assert.equal(getNextPlaybackSpeed(1.5), 2);
+  assert.equal(getNextPlaybackSpeed(2), 1);
 });

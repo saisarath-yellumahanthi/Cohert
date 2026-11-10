@@ -73,6 +73,19 @@ export interface UserPrivateInfo {
   createdAt: unknown;
 }
 
+export interface FileAttachment {
+  id: string;
+  name: string;
+  type: string;
+  extension: string;
+  size: number;
+  url: string;
+  storagePath: string;
+  uploaderId: string;
+  uploaderName: string;
+  uploadedAt: number;
+}
+
 export interface Post {
   id: string;
   authorId: string;
@@ -88,6 +101,7 @@ export interface Post {
   externalLink: string;
   deadlineDate: string;
   lookingForTeammates: boolean;
+  attachments?: FileAttachment[];
   likesCount: number;
   commentsCount: number;
   createdAt: unknown;
@@ -134,6 +148,10 @@ export interface ChatMessage {
   senderAvatar: string;
   text: string;
   imageUrl: string;
+  audioUrl?: string;
+  audioDuration?: number;
+  audioMimeType?: string;
+  attachments?: FileAttachment[];
   status: 'sent' | 'seen';
   createdAt: unknown;
   updatedAt: unknown;

@@ -154,3 +154,14 @@ test('Dirty Dozen #8-#12: Circle capacity limit (max 5 members) and invite code 
   assert.equal(validateInviteCode('WRONG', 'COHERT2026'), false);
   assert.equal(validateInviteCode('COHERT2026', 'COHERT2026'), true);
 });
+
+test('Firestore and Storage rules cover audio messages and file attachments with 15 MB limit', () => {
+  const storageRulesSource = fs.readFileSync('./storage.rules', 'utf8');
+  assert.equal(rulesSource.includes("'audioUrl', 'audioDuration', 'audioMimeType', 'attachments'"), true);
+  assert.equal(rulesSource.includes("'imageUrl', 'attachments', 'externalLink'"), true);
+  assert.equal(storageRulesSource.includes('request.resource.size <= 15 * 1024 * 1024'), true);
+  assert.equal(storageRulesSource.includes('match /chats/{chatId}/audio/{fileName}'), true);
+  assert.equal(storageRulesSource.includes('match /chats/{chatId}/files/{messageId}/{fileName}'), true);
+  assert.equal(storageRulesSource.includes('match /posts/{postId}/files/{fileName}'), true);
+});
+

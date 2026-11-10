@@ -33,6 +33,7 @@ import {
   sanitizeString,
   TOPIC_CHANNELS,
 } from '../utils/validation';
+import { FileAttachmentCard } from './FileAttachmentCard';
 
 interface PostCardProps {
   post: Post;
@@ -384,6 +385,14 @@ export const PostCard: React.FC<PostCardProps> = ({
           <span className="font-semibold mr-1.5">{post.authorName}</span>{' '}
           {post.content}
         </p>
+
+        {post.attachments && post.attachments.length > 0 && (
+          <div className="space-y-2 pt-1">
+            {post.attachments.map((att) => (
+              <FileAttachmentCard key={att.id} attachment={att} isMine={false} />
+            ))}
+          </div>
+        )}
 
         {post.externalLink && (
           <a

@@ -186,6 +186,7 @@ const ALLOWED_POST_KEYS = new Set([
   'externalLink',
   'deadlineDate',
   'lookingForTeammates',
+  'attachments',
   'likesCount',
   'commentsCount',
   'createdAt',
@@ -426,4 +427,158 @@ export function getInitials(name: string): string {
   const parts = cleaned.split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
+export const MAX_AUDIO_DURATION_SECONDS = 300; // 5 minutes
+
+export const BLOCKED_EXECUTABLE_EXTENSIONS = new Set([
+  'exe',
+  'bat',
+  'sh',
+  'apk',
+  'js',
+  'msi',
+  'cmd',
+  'com',
+  'scr',
+  'vbs',
+  'ps1',
+  'jar',
+  'dmg',
+  'app',
+  'bin',
+  'cjs',
+  'mjs'
+]);
+
+export const ALLOWED_FILE_EXTENSIONS = new Set([
+  'pdf',
+  'doc',
+  'docx',
+  'ppt',
+  'pptx',
+  'xls',
+  'xlsx',
+  'txt',
+  'zip',
+  'csv',
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'svg'
+]);
+
+export const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
+
+export const ALLOWED_FILE_INPUT_ACCEPT =
+  '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.csv,image/*';
+
+export function getFileExtension(fileName: string): string {
+  const cleaned = (fileName || '').trim().toLowerCase();
+  const lastDot = cleaned.lastIndexOf('.');
+  if (lastDot <= 0 || lastDot === cleaned.length - 1) return '';
+  return cleaned.slice(lastDot + 1);
+}
+
+export function isImageAttachment(fileName: string, mimeType?: string): boolean {
+  const ext = getFileExtension(fileName);
+  if (IMAGE_EXTENSIONS.has(ext)) return true;
+  if (mimeType && mimeType.toLowerCase().startsWith('image/')) return true;
+  return false;
+}
+
+export function validateAttachmentFile(file: {
+  name: string;
+  size: number;
+  type?: string;
+}): {
+  valid: boolean;
+  error?: string;
+  extension: string;
+  isImage: boolean;
+  isPdf: boolean;
+} {
+  const ext = getFileExtension(file.name);
+  if (!ext) {
+    return {
+      valid: false,
+      error: `File "${file.name}" does not have a valid file extension.`,
+      extension: '',
+      isImage: false,
+      isPdf: false
+    };
+  }
+
+  if (BLOCKED_EXECUTABLE_EXTENSIONS.has(ext)) {
+    return {
+      valid: false,
+      error: `Executable and script files (.${ext}) are blocked for security.`,
+      extension: ext,
+      isImage: false,
+      isPdf: false
+    };
+  }
+
+  if (!ALLOWED_FILE_EXTENSIONS.has(ext)) {
+    return {
+      valid: false,
+      error: `Unsupported file type (.${ext}). Allowed: PDF, DOC/DOCX, PPT/PPTX, XLS/XLSX, TXT, ZIP, CSV, and images.`,
+      extension: ext,
+      isImage: false,
+      isPdf: false
+    };
+  }
+
+  if (typeof file.size !== 'number' || file.size <= 0) {
+    return {
+      valid: false,
+      error: `File "${file.name}" is empty or unreadable.`,
+      extension: ext,
+      isImage: IMAGE_EXTENSIONS.has(ext),
+      isPdf: ext === 'pdf'
+    };
+  }
+
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: `File "${file.name}" exceeds the 15 MB size limit (${formatFileSize(file.size)}).`,
+      extension: ext,
+      isImage: IMAGE_EXTENSIONS.has(ext),
+      isPdf: ext === 'pdf'
+    };
+  }
+
+  return {
+    valid: true,
+    extension: ext,
+    isImage: IMAGE_EXTENSIONS.has(ext),
+    isPdf: ext === 'pdf'
+  };
+}
+
+export function formatFileSize(bytes: number): string {
+  if (typeof bytes !== 'number' || Number.isNaN(bytes) || bytes < 0) return '0 B';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(1)} MB`;
+}
+
+export function formatAudioDuration(seconds: number): string {
+  if (typeof seconds !== 'number' || Number.isNaN(seconds) || seconds < 0) return '0:00';
+  const clamped = Math.min(MAX_AUDIO_DURATION_SECONDS, Math.max(0, Math.floor(seconds)));
+  const mins = Math.floor(clamped / 60);
+  const secs = clamped % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+export function getNextPlaybackSpeed(current: 1 | 1.5 | 2): 1 | 1.5 | 2 {
+  if (current === 1) return 1.5;
+  if (current === 1.5) return 2;
+  return 1;
 }
