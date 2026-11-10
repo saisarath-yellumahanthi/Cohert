@@ -13,13 +13,12 @@ import {
 } from 'lucide-react';
 import {
   createUserWithEmailAndPassword,
-  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
   User,
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import firebaseConfig from '../firebase-applet-config.json';
 import { CircleConfig } from '../types';
@@ -46,11 +45,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ darkMode, onToggleDarkMo
   const [infoMsg, setInfoMsg] = useState('');
   const [showSetupGuide, setShowSetupGuide] = useState(false);
 
-  const registerOrVerifyCircleMember = async (user: User, providedInviteCode: string) => {
+  const registerOrVerifyCircleMember = async (
+    user: User,
+    providedInviteCode: string,
+    isSignInAttempt: boolean = false
+  ) => {
     const profileRef = doc(db, 'profiles', user.uid);
     const existingProfileSnap = await getDoc(profileRef);
     if (existingProfileSnap.exists()) {
-      return; // Existing member signing back in
+      await updateDoc(profileRef, {
+        onlineStatus: 'online',
+        isOnline: true,
+        lastActiveAt: serverTimestamp(),
+        lastSeen: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return;
     }
 
     const configRef = doc(db, 'circleConfig', 'cohert');
@@ -61,15 +71,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ darkMode, onToggleDarkMo
       const initialInviteCode = validateInviteCodeFormat(providedInviteCode.trim())
         ? providedInviteCode.trim()
         : 'COHERT2026';
-
-      if (!user.emailVerified) {
-        await sendEmailVerification(user);
-        setInfoMsg(
-          'Verification email sent! Please click the link in your inbox and sign in again, or use Google Sign-In for instant verified access.'
-        );
-        await signOut(auth);
-        return;
-      }
 
       const batch = writeBatch(db);
       batch.set(doc(db, 'admins', user.uid), {
@@ -97,7 +98,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ darkMode, onToggleDarkMo
         profileCompleted: false,
         onboardingCompleted: false,
         onlineStatus: 'online',
+        isOnline: true,
         lastActiveAt: serverTimestamp(),
+        lastSeen: serverTimestamp(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -119,18 +122,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ darkMode, onToggleDarkMo
       throw new Error(capacityCheck.message);
     }
 
-    if (!validateInviteCode(providedInviteCode, configData.inviteCode)) {
+    if (!isSignInAttempt && !validateInviteCode(providedInviteCode, configData.inviteCode)) {
       await signOut(auth);
       throw new Error('Invalid Invite Code. Ask your circle admin for the private invite code.');
-    }
-
-    if (!user.emailVerified) {
-      await sendEmailVerification(user);
-      setInfoMsg(
-        'Verification email sent! Please verify your email and sign in, or use Google Sign-In for instant verified access.'
-      );
-      await signOut(auth);
-      return;
     }
 
     const batch = writeBatch(db);
@@ -150,7 +144,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ darkMode, onToggleDarkMo
       profileCompleted: false,
       onboardingCompleted: false,
       onlineStatus: 'online',
+      isOnline: true,
       lastActiveAt: serverTimestamp(),
+      lastSeen: serverTimestamp(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -189,10 +185,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ darkMode, onToggleDarkMo
     try {
       if (mode === 'signup') {
         const cred = await createUserWithEmailAndPassword(auth, cleanedEmail, password);
-        await registerOrVerifyCircleMember(cred.user, inviteCode);
+        await registerOrVerifyCircleMember(cred.user, inviteCode, false);
       } else {
         const cred = await signInWithEmailAndPassword(auth, cleanedEmail, password);
-        await registerOrVerifyCircleMember(cred.user, inviteCode);
+        await registerOrVerifyCircleMember(cred.user, inviteCode, true);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

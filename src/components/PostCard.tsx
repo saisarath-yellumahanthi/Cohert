@@ -16,16 +16,17 @@ import {
   collection,
   doc,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
+  where,
   writeBatch,
   deleteDoc,
 } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { OperationType, Post, PostComment, UserProfile } from '../types';
 import {
+  extractTimestampMs,
   formatDeadlineCountdown,
   formatRelativeTime,
   getInitials,
@@ -58,9 +59,18 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [submittingComment, setSubmittingComment] = useState(false);
   const [teammateRequested, setTeammateRequested] = useState(false);
   const [imageBroken, setImageBroken] = useState(false);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  // Tick every 30 seconds so deadline countdowns and comment timestamps update every minute
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const topicInfo = TOPIC_CHANNELS.find((t) => t.id === post.topic);
-  const countdown = post.deadlineDate ? formatDeadlineCountdown(post.deadlineDate) : null;
+  const countdown = post.deadlineDate ? formatDeadlineCountdown(post.deadlineDate, nowMs) : null;
   const canDelete = post.authorId === currentUserProfile.userId || isAdmin;
 
   // Listen to whether current user liked this post
@@ -79,20 +89,22 @@ export const PostCard: React.FC<PostCardProps> = ({
     return () => unsub();
   }, [post.id, currentUserProfile.userId, isPreviewMode]);
 
-  // Listen to comments when comment drawer is open
+  // Listen to all comments on this post in real time for all members
   useEffect(() => {
-    if (isPreviewMode || !showComments || !post.id) return;
+    if (isPreviewMode || !post.id) return;
     const commentsQuery = query(
       collection(db, 'posts', post.id, 'comments'),
-      orderBy('createdAt', 'asc')
+      where('postId', '==', post.id)
     );
     const unsub = onSnapshot(
       commentsQuery,
       (snap) => {
-        const items: PostComment[] = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<PostComment, 'id'>),
-        }));
+        const items: PostComment[] = snap.docs
+          .map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<PostComment, 'id'>),
+          }))
+          .sort((a, b) => extractTimestampMs(a.createdAt) - extractTimestampMs(b.createdAt));
         setComments(items);
       },
       (err) => {
@@ -100,7 +112,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       }
     );
     return () => unsub();
-  }, [showComments, post.id, isPreviewMode]);
+  }, [post.id, isPreviewMode]);
 
   const handleToggleLike = async () => {
     setHeartAnim(true);
@@ -430,7 +442,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             className="inline-flex items-center gap-1.5 min-h-[44px] min-w-[44px] text-sm font-medium text-[#262626] dark:text-[#F5F5F5] hover:opacity-80 transition-opacity"
           >
             <MessageCircle className="w-6 h-6" />
-            <span className="tabular-nums">{post.commentsCount}</span>
+            <span className="tabular-nums">{Math.max(post.commentsCount || 0, comments.length)}</span>
           </button>
         </div>
 
@@ -448,8 +460,8 @@ export const PostCard: React.FC<PostCardProps> = ({
         </button>
       </div>
 
-      {/* Comments Section */}
-      {showComments && (
+      {/* Comments Section (always displays existing comments in real time + input when toggled) */}
+      {(showComments || comments.length > 0) && (
         <div className="border-t border-[#DBDBDB] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#1A1A1A] px-4 py-3 space-y-3">
           {comments.length === 0 ? (
             <p className="text-xs text-[#737373] dark:text-[#A8A8A8] py-1">
@@ -459,14 +471,28 @@ export const PostCard: React.FC<PostCardProps> = ({
             <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
               {comments.map((c) => (
                 <div key={c.id} className="text-xs leading-relaxed flex items-start justify-between gap-2">
-                  <div>
-                    <span className="font-semibold text-[#262626] dark:text-[#F5F5F5] mr-1.5">
-                      {c.authorName}
-                    </span>
-                    <span className="text-[#262626] dark:text-[#F5F5F5]">{c.text}</span>
+                  <div className="flex items-start gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-full bg-[#FFFFFF] dark:bg-[#121212] border border-[#DBDBDB] dark:border-[#262626] overflow-hidden flex items-center justify-center text-[10px] font-semibold shrink-0 mt-0.5">
+                      {c.authorAvatar ? (
+                        <img
+                          src={c.authorAvatar}
+                          alt={c.authorName}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        getInitials(c.authorName)
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-semibold text-[#262626] dark:text-[#F5F5F5] mr-1.5">
+                        {c.authorName}
+                      </span>
+                      <span className="text-[#262626] dark:text-[#F5F5F5]">{c.text}</span>
+                    </div>
                   </div>
                   <span className="text-[11px] text-[#737373] dark:text-[#A8A8A8] shrink-0">
-                    {formatRelativeTime(c.createdAt)}
+                    {formatRelativeTime(c.createdAt, nowMs)}
                   </span>
                 </div>
               ))}

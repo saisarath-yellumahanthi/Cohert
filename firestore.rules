@@ -24,19 +24,15 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
     function isAdmin() {
-      return isVerified() && (
-        request.auth.token.email == 'saisarathpandu@gmail.com' ||
+      return isSignedIn() && (
+        (request.auth.token.email_verified == true && request.auth.token.email == 'saisarathpandu@gmail.com') ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
 
     function isCircleMember() {
-      return isVerified() && (
+      return isSignedIn() && (
         exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) ||
         isAdmin()
       );
@@ -72,7 +68,7 @@ service cloud.firestore {
         data.keys().hasOnly([
           'userId', 'circleId', 'name', 'avatarUrl', 'branch', 'year',
           'skills', 'bio', 'profileCompleted', 'onboardingCompleted',
-          'onlineStatus', 'lastActiveAt', 'createdAt', 'updatedAt'
+          'onlineStatus', 'lastActiveAt', 'isOnline', 'lastSeen', 'createdAt', 'updatedAt'
         ]) &&
         isValidId(data.userId) &&
         data.circleId is string && data.circleId.size() == 6 && data.circleId == 'cohert' &&
@@ -86,7 +82,9 @@ service cloud.firestore {
         data.profileCompleted is bool &&
         data.onboardingCompleted is bool &&
         data.onlineStatus is string && data.onlineStatus.size() <= 10 && data.onlineStatus in ['online', 'offline'] &&
+        (!('isOnline' in data) || data.isOnline is bool) &&
         data.lastActiveAt is timestamp &&
+        (!('lastSeen' in data) || data.lastSeen is timestamp) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -234,15 +232,15 @@ service cloud.firestore {
 
     // /admins/{adminId}
     match /admins/{adminId} {
-      allow get: if isVerified() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
       allow list: if false;
-      allow create: if isVerified() &&
+      allow create: if isSignedIn() &&
         isValidId(adminId) &&
         adminId == request.auth.uid &&
         isValidAdminRecord(incoming()) &&
         incoming().createdAt == request.time &&
         (
-          request.auth.token.email == 'saisarathpandu@gmail.com' ||
+          (request.auth.token.email_verified == true && request.auth.token.email == 'saisarathpandu@gmail.com') ||
           !exists(/databases/$(database)/documents/circleConfig/cohert)
         );
       allow update, delete: if false;
@@ -252,7 +250,7 @@ service cloud.firestore {
     match /circleConfig/{configId} {
       allow get: if isSignedIn() && isValidId(configId) && configId == 'cohert';
       allow list: if false;
-      allow create: if isVerified() &&
+      allow create: if isSignedIn() &&
         isValidId(configId) &&
         configId == 'cohert' &&
         isValidCircleConfig(incoming()) &&
@@ -260,7 +258,7 @@ service cloud.firestore {
         incoming().memberCount == 1 &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
-      allow update: if isVerified() &&
+      allow update: if isSignedIn() &&
         isValidId(configId) &&
         configId == 'cohert' &&
         isValidCircleConfig(incoming()) &&
@@ -281,9 +279,9 @@ service cloud.firestore {
 
     // /profiles/{userId}
     match /profiles/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isCircleMember());
-      allow list: if isVerified() && existing().circleId == 'cohert';
-      allow create: if isVerified() &&
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn() && existing().circleId == 'cohert';
+      allow create: if isSignedIn() &&
         isValidId(userId) &&
         userId == request.auth.uid &&
         isValidUserProfile(incoming()) &&
@@ -291,7 +289,7 @@ service cloud.firestore {
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
         getAfter(/databases/$(database)/documents/circleConfig/cohert).data.memberCount <= 5;
-      allow update: if isVerified() &&
+      allow update: if isSignedIn() &&
         isValidId(userId) &&
         isValidUserProfile(incoming()) &&
         incoming().userId == existing().userId &&
@@ -302,35 +300,38 @@ service cloud.firestore {
             incoming().diff(existing()).affectedKeys().hasOnly([
               'name', 'avatarUrl', 'branch', 'year', 'skills', 'bio',
               'profileCompleted', 'onboardingCompleted', 'onlineStatus',
-              'lastActiveAt', 'updatedAt'
+              'lastActiveAt', 'isOnline', 'lastSeen', 'updatedAt'
             ])
           ) ||
           isAdmin()
         );
-      allow delete: if isVerified() && isValidId(userId) && isAdmin();
+      allow delete: if isSignedIn() && isValidId(userId) && isAdmin();
     }
 
     // /userPrivate/{userId} (PII Isolated Collection)
     match /userPrivate/{userId} {
-      allow get: if isVerified() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
-      allow list: if isVerified() &&
-        (existing().userId == request.auth.uid || request.auth.token.email == 'saisarathpandu@gmail.com') &&
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() &&
+        (
+          existing().userId == request.auth.uid ||
+          (request.auth.token.email_verified == true && request.auth.token.email == 'saisarathpandu@gmail.com')
+        ) &&
         existing().circleId == 'cohert';
-      allow create: if isVerified() &&
+      allow create: if isSignedIn() &&
         isValidId(userId) &&
         userId == request.auth.uid &&
         isValidUserPrivateInfo(incoming()) &&
         incoming().createdAt == request.time &&
         existsAfter(/databases/$(database)/documents/profiles/$(request.auth.uid));
       allow update: if false;
-      allow delete: if isVerified() && isValidId(userId) && isAdmin();
+      allow delete: if isSignedIn() && isValidId(userId) && isAdmin();
     }
 
     // /posts/{postId}
     match /posts/{postId} {
-      allow get: if isVerified() && isValidId(postId) && existing().circleId == 'cohert' && isCircleMember();
-      allow list: if isVerified() && existing().circleId == 'cohert';
-      allow create: if isVerified() &&
+      allow get: if isSignedIn() && isValidId(postId) && existing().circleId == 'cohert';
+      allow list: if isSignedIn() && existing().circleId == 'cohert';
+      allow create: if isSignedIn() &&
         isValidId(postId) &&
         isValidPost(incoming()) &&
         incoming().authorId == request.auth.uid &&
@@ -339,7 +340,7 @@ service cloud.firestore {
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
         isCircleMember();
-      allow update: if isVerified() &&
+      allow update: if isSignedIn() &&
         isValidId(postId) &&
         isValidPost(incoming()) &&
         incoming().authorId == existing().authorId &&
@@ -375,15 +376,14 @@ service cloud.firestore {
           ) ||
           isAdmin()
         );
-      allow delete: if isVerified() && isValidId(postId) && isCircleMember() && (existing().authorId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && isValidId(postId) && isCircleMember() && (existing().authorId == request.auth.uid || isAdmin());
 
       // Subcollection: /posts/{postId}/likes/{likeId}
       match /likes/{likeId} {
-        allow get: if isVerified() && isValidId(postId) && isValidId(likeId) &&
-          isCircleMember() &&
+        allow get: if isSignedIn() && isValidId(postId) && isValidId(likeId) &&
           get(/databases/$(database)/documents/posts/$(postId)).data.circleId == 'cohert';
-        allow list: if isVerified() && existing().postId == postId;
-        allow create: if isVerified() &&
+        allow list: if isSignedIn() && existing().postId == postId;
+        allow create: if isSignedIn() &&
           isValidId(postId) &&
           isValidId(likeId) &&
           likeId == request.auth.uid &&
@@ -393,7 +393,7 @@ service cloud.firestore {
           isCircleMember() &&
           get(/databases/$(database)/documents/posts/$(postId)).data.circleId == 'cohert';
         allow update: if false;
-        allow delete: if isVerified() &&
+        allow delete: if isSignedIn() &&
           isValidId(postId) &&
           isValidId(likeId) &&
           likeId == request.auth.uid &&
@@ -403,11 +403,10 @@ service cloud.firestore {
 
       // Subcollection: /posts/{postId}/comments/{commentId}
       match /comments/{commentId} {
-        allow get: if isVerified() && isValidId(postId) && isValidId(commentId) &&
-          isCircleMember() &&
+        allow get: if isSignedIn() && isValidId(postId) && isValidId(commentId) &&
           get(/databases/$(database)/documents/posts/$(postId)).data.circleId == 'cohert';
-        allow list: if isVerified() && existing().postId == postId;
-        allow create: if isVerified() &&
+        allow list: if isSignedIn() && existing().postId == postId;
+        allow create: if isSignedIn() &&
           isValidId(postId) &&
           isValidId(commentId) &&
           isValidPostComment(incoming()) &&
@@ -416,7 +415,7 @@ service cloud.firestore {
           isCircleMember() &&
           get(/databases/$(database)/documents/posts/$(postId)).data.circleId == 'cohert';
         allow update: if false;
-        allow delete: if isVerified() &&
+        allow delete: if isSignedIn() &&
           isValidId(postId) &&
           isValidId(commentId) &&
           isCircleMember() &&
@@ -426,23 +425,23 @@ service cloud.firestore {
 
     // /bookmarks/{bookmarkId}
     match /bookmarks/{bookmarkId} {
-      allow get: if isVerified() && isValidId(bookmarkId) && existing().userId == request.auth.uid && isCircleMember();
-      allow list: if isVerified() && existing().userId == request.auth.uid;
-      allow create: if isVerified() &&
+      allow get: if isSignedIn() && isValidId(bookmarkId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isSignedIn() &&
         isValidId(bookmarkId) &&
         isValidBookmark(incoming()) &&
         incoming().createdAt == request.time &&
         isCircleMember() &&
         exists(/databases/$(database)/documents/posts/$(incoming().postId));
       allow update: if false;
-      allow delete: if isVerified() && isValidId(bookmarkId) && existing().userId == request.auth.uid && isCircleMember();
+      allow delete: if isSignedIn() && isValidId(bookmarkId) && existing().userId == request.auth.uid;
     }
 
     // /chats/{chatId}
     match /chats/{chatId} {
-      allow get: if isVerified() && isValidId(chatId) && request.auth.uid in existing().participantIds && isCircleMember();
-      allow list: if isVerified() && request.auth.uid in existing().participantIds;
-      allow create: if isVerified() &&
+      allow get: if isSignedIn() && isValidId(chatId) && request.auth.uid in existing().participantIds;
+      allow list: if isSignedIn() && request.auth.uid in existing().participantIds;
+      allow create: if isSignedIn() &&
         isValidId(chatId) &&
         isValidChatRoom(incoming()) &&
         incoming().creatorId == request.auth.uid &&
@@ -450,7 +449,7 @@ service cloud.firestore {
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
         isCircleMember();
-      allow update: if isVerified() &&
+      allow update: if isSignedIn() &&
         isValidId(chatId) &&
         isValidChatRoom(incoming()) &&
         incoming().creatorId == existing().creatorId &&
@@ -469,15 +468,14 @@ service cloud.firestore {
           ) ||
           isAdmin()
         );
-      allow delete: if isVerified() && isValidId(chatId) && isCircleMember() && (existing().creatorId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && isValidId(chatId) && isCircleMember() && (existing().creatorId == request.auth.uid || isAdmin());
 
       // Subcollection: /chats/{chatId}/messages/{messageId}
       match /messages/{messageId} {
-        allow get: if isVerified() && isValidId(chatId) && isValidId(messageId) &&
-          isCircleMember() &&
+        allow get: if isSignedIn() && isValidId(chatId) && isValidId(messageId) &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
-        allow list: if isVerified() && existing().chatId == chatId;
-        allow create: if isVerified() &&
+        allow list: if isSignedIn() && existing().chatId == chatId;
+        allow create: if isSignedIn() &&
           isValidId(chatId) &&
           isValidId(messageId) &&
           isValidChatMessage(incoming()) &&
@@ -487,7 +485,7 @@ service cloud.firestore {
           incoming().updatedAt == request.time &&
           isCircleMember() &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
-        allow update: if isVerified() &&
+        allow update: if isSignedIn() &&
           isValidId(chatId) &&
           isValidId(messageId) &&
           isValidChatMessage(incoming()) &&
@@ -504,7 +502,7 @@ service cloud.firestore {
             ) ||
             isAdmin()
           );
-        allow delete: if isVerified() &&
+        allow delete: if isSignedIn() &&
           isValidId(chatId) &&
           isValidId(messageId) &&
           isCircleMember() &&
@@ -514,9 +512,9 @@ service cloud.firestore {
 
     // /notifications/{notificationId}
     match /notifications/{notificationId} {
-      allow get: if isVerified() && isValidId(notificationId) && existing().recipientId == request.auth.uid && isCircleMember();
-      allow list: if isVerified() && existing().recipientId == request.auth.uid;
-      allow create: if isVerified() &&
+      allow get: if isSignedIn() && isValidId(notificationId) && existing().recipientId == request.auth.uid;
+      allow list: if isSignedIn() && existing().recipientId == request.auth.uid;
+      allow create: if isSignedIn() &&
         isValidId(notificationId) &&
         isValidNotificationItem(incoming()) &&
         incoming().actorId == request.auth.uid &&
@@ -525,7 +523,7 @@ service cloud.firestore {
         incoming().updatedAt == request.time &&
         isCircleMember() &&
         exists(/databases/$(database)/documents/profiles/$(incoming().recipientId));
-      allow update: if isVerified() &&
+      allow update: if isSignedIn() &&
         isValidId(notificationId) &&
         isValidNotificationItem(incoming()) &&
         existing().recipientId == request.auth.uid &&
@@ -542,7 +540,7 @@ service cloud.firestore {
           ) ||
           isAdmin()
         );
-      allow delete: if isVerified() && isValidId(notificationId) && isCircleMember() && (existing().recipientId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && isValidId(notificationId) && isCircleMember() && (existing().recipientId == request.auth.uid || isAdmin());
     }
   }
 }

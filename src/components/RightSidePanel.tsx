@@ -1,7 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { CalendarClock, ExternalLink, PlusCircle, Users } from 'lucide-react';
 import { Post, UserProfile } from '../types';
-import { formatDeadlineCountdown, getInitials, MAX_CIRCLE_MEMBERS } from '../utils/validation';
+import {
+  formatDeadlineCountdown,
+  formatPresenceStatus,
+  getInitials,
+  MAX_CIRCLE_MEMBERS,
+} from '../utils/validation';
 
 interface RightSidePanelProps {
   posts: Post[];
@@ -18,22 +23,36 @@ export const RightSidePanel: React.FC<RightSidePanelProps> = ({
   onOpenCreateOpportunity,
   onOpenChat,
 }) => {
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const deadlinePosts = React.useMemo(() => {
     return posts
       .filter((p) => p.postType === 'opportunity' && Boolean(p.deadlineDate))
       .map((p) => ({
         post: p,
-        countdown: formatDeadlineCountdown(p.deadlineDate),
+        countdown: formatDeadlineCountdown(p.deadlineDate, nowMs),
       }))
       .filter((item) => item.countdown && !item.countdown.isPast)
-      .sort((a, b) => (a.countdown!.daysLeft - b.countdown!.daysLeft));
-  }, [posts]);
+      .sort((a, b) => a.countdown!.diffMs - b.countdown!.diffMs);
+  }, [posts, nowMs]);
 
-  const onlineFriends = React.useMemo(() => {
-    return circleMembers.filter(
-      (m) => m.onlineStatus === 'online' && m.userId !== currentUserId
-    );
-  }, [circleMembers, currentUserId]);
+  const friendsWithPresence = React.useMemo(() => {
+    const others = circleMembers.filter((m) => m.userId !== currentUserId);
+    const list = others.length > 0 ? others : circleMembers;
+    return list
+      .map((member) => ({
+        friend: member,
+        presence: formatPresenceStatus(member, nowMs),
+      }))
+      .sort((a, b) => Number(b.presence.isOnline) - Number(a.presence.isOnline));
+  }, [circleMembers, currentUserId, nowMs]);
 
   return (
     <aside
@@ -128,7 +147,7 @@ export const RightSidePanel: React.FC<RightSidePanelProps> = ({
           </span>
         </div>
 
-        {onlineFriends.length === 0 ? (
+        {friendsWithPresence.length === 0 ? (
           <div className="py-4 text-center space-y-2">
             <p className="text-xs text-[#737373] dark:text-[#A8A8A8]">
               No other circle members are active right now.
@@ -143,35 +162,49 @@ export const RightSidePanel: React.FC<RightSidePanelProps> = ({
           </div>
         ) : (
           <div className="space-y-2.5">
-            {onlineFriends.map((friend) => (
+            {friendsWithPresence.map(({ friend, presence }) => (
               <div
                 key={friend.userId}
-                className="flex items-center justify-between gap-2 py-1"
+                onClick={onOpenChat}
+                className="flex items-center justify-between gap-2 py-1 cursor-pointer"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-[#FAFAFA] dark:bg-[#1A1A1A] border border-[#DBDBDB] dark:border-[#262626] overflow-hidden flex items-center justify-center text-xs font-semibold shrink-0">
-                    {friend.avatarUrl ? (
-                      <img
-                        src={friend.avatarUrl}
-                        alt={friend.name}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      getInitials(friend.name)
-                    )}
+                  <div className="relative shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-[#FAFAFA] dark:bg-[#1A1A1A] border border-[#DBDBDB] dark:border-[#262626] overflow-hidden flex items-center justify-center text-xs font-semibold shrink-0">
+                      {friend.avatarUrl ? (
+                        <img
+                          src={friend.avatarUrl}
+                          alt={friend.name}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        getInitials(friend.name)
+                      )}
+                    </div>
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full border-2 border-white dark:border-[#121212] absolute -bottom-0.5 -right-0.5 ${
+                        presence.isOnline ? 'bg-emerald-500' : 'bg-[#A8A8A8]'
+                      }`}
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-[#262626] dark:text-[#F5F5F5] truncate">
                       {friend.name || 'Friend'}
                     </p>
                     <p className="text-[11px] text-[#737373] dark:text-[#A8A8A8] truncate">
-                      {friend.branch || 'Active now'}
+                      {presence.statusText}
                     </p>
                   </div>
                 </div>
-                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                  Active
+                <span
+                  className={`text-[11px] font-medium shrink-0 ${
+                    presence.isOnline
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-[#737373] dark:text-[#A8A8A8]'
+                  }`}
+                >
+                  {presence.isOnline ? 'Active now' : presence.statusText}
                 </span>
               </div>
             ))}

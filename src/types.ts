@@ -59,7 +59,9 @@ export interface UserProfile {
   profileCompleted: boolean;
   onboardingCompleted: boolean;
   onlineStatus: 'online' | 'offline';
+  isOnline?: boolean;
   lastActiveAt: unknown;
+  lastSeen?: unknown;
   createdAt: unknown;
   updatedAt: unknown;
 }

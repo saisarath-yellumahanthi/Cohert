@@ -12,19 +12,26 @@ import {
   collection,
   doc,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { compressImageFile, db, handleFirestoreError } from '../firebase';
 import { ChatMessage, ChatRoom, OperationType, UserProfile } from '../types';
-import { formatRelativeTime, getInitials, sanitizeString } from '../utils/validation';
+import {
+  extractTimestampMs,
+  formatPresenceStatus,
+  formatRelativeTime,
+  getInitials,
+  sanitizeString,
+} from '../utils/validation';
 
 interface ChatWindowProps {
   chat: ChatRoom;
   currentUserProfile: UserProfile;
+  circleMembers?: UserProfile[];
   onBackMobile: () => void;
   isPreviewMode?: boolean;
 }
@@ -32,6 +39,7 @@ interface ChatWindowProps {
 export const ChatWindow: React.FC<ChatWindowProps> = ({
   chat,
   currentUserProfile,
+  circleMembers = [],
   onBackMobile,
   isPreviewMode = false,
 }) => {
@@ -39,22 +47,48 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const [text, setText] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [sending, setSending] = useState(false);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const typingTimeoutRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const peerId =
+    chat.chatType === 'direct'
+      ? chat.participantIds.find((id) => id !== currentUserProfile.userId) ||
+        chat.participantIds[0]
+      : null;
+  const peerProfile = peerId
+    ? circleMembers.find((m) => m.userId === peerId)
+    : undefined;
+  const displayChatName =
+    chat.chatType === 'direct' && peerProfile?.name
+      ? peerProfile.name
+      : chat.name;
+  const peerPresence = peerProfile
+    ? formatPresenceStatus(peerProfile, nowMs)
+    : null;
 
   useEffect(() => {
     if (isPreviewMode || !chat.id) return;
     const msgQuery = query(
       collection(db, 'chats', chat.id, 'messages'),
-      orderBy('createdAt', 'asc')
+      where('chatId', '==', chat.id)
     );
     const unsub = onSnapshot(
       msgQuery,
       (snap) => {
-        const loaded: ChatMessage[] = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<ChatMessage, 'id'>),
-        }));
+        const loaded: ChatMessage[] = snap.docs
+          .map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<ChatMessage, 'id'>),
+          }))
+          .sort((a, b) => extractTimestampMs(a.createdAt) - extractTimestampMs(b.createdAt));
         setMessages(loaded);
 
         // Mark unread incoming messages as seen
@@ -177,7 +211,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             actorAvatar: currentUserProfile.avatarUrl || '',
             type: 'message',
             targetId: chat.id,
-            message: `sent a message in "${sanitizeString(chat.name, 40)}": "${sanitizeString(cleanedText || 'Photo', 60)}"`,
+            message: `sent a message in "${sanitizeString(displayChatName, 40)}": "${sanitizeString(cleanedText || 'Photo', 60)}"`,
             read: false,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -211,24 +245,50 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          <div className="p-[2px] rounded-full bg-cohert-gradient shrink-0">
-            <div className="w-9 h-9 rounded-full bg-[#FFFFFF] dark:bg-[#121212] flex items-center justify-center text-xs font-semibold">
-              {chat.chatType === 'group' ? (
-                <Users className="w-4 h-4 text-[#833AB4] dark:text-[#FCB045]" />
-              ) : (
-                getInitials(chat.name)
-              )}
+          <div className="relative shrink-0">
+            <div className="p-[2px] rounded-full bg-cohert-gradient">
+              <div className="w-9 h-9 rounded-full bg-[#FFFFFF] dark:bg-[#121212] overflow-hidden flex items-center justify-center text-xs font-semibold">
+                {chat.chatType === 'group' ? (
+                  <Users className="w-4 h-4 text-[#833AB4] dark:text-[#FCB045]" />
+                ) : peerProfile?.avatarUrl ? (
+                  <img
+                    src={peerProfile.avatarUrl}
+                    alt={displayChatName}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  getInitials(displayChatName)
+                )}
+              </div>
             </div>
+            {chat.chatType === 'direct' && peerPresence && (
+              <span
+                className={`w-2.5 h-2.5 rounded-full border-2 border-white dark:border-[#121212] absolute -bottom-0.5 -right-0.5 ${
+                  peerPresence.isOnline ? 'bg-emerald-500' : 'bg-[#A8A8A8]'
+                }`}
+              />
+            )}
           </div>
 
           <div className="min-w-0">
             <h3 className="text-sm font-semibold font-heading text-[#262626] dark:text-[#F5F5F5] truncate">
-              {chat.name}
+              {displayChatName}
             </h3>
             <p className="text-[11px] text-[#737373] dark:text-[#A8A8A8]">
               {isSomeoneElseTyping ? (
                 <span className="text-[#833AB4] dark:text-[#FCB045] font-medium">
                   {chat.typingUserName || 'Friend'} is typing...
+                </span>
+              ) : chat.chatType === 'direct' && peerPresence ? (
+                <span
+                  className={
+                    peerPresence.isOnline
+                      ? 'text-emerald-600 dark:text-emerald-400 font-medium'
+                      : ''
+                  }
+                >
+                  {peerPresence.statusText}
                 </span>
               ) : (
                 `${chat.participantIds.length} member${chat.participantIds.length === 1 ? '' : 's'} in room`
@@ -242,7 +302,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-xs text-[#737373] dark:text-[#A8A8A8]">
-            <p>No messages in &ldquo;{chat.name}&rdquo; yet. Send a message or share a photo below.</p>
+            <p>No messages in &ldquo;{displayChatName}&rdquo; yet. Send a message or share a photo below.</p>
           </div>
         ) : (
           messages.map((msg) => {

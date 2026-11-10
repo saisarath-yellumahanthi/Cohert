@@ -98,7 +98,9 @@ const ALLOWED_PROFILE_KEYS = new Set([
   'profileCompleted',
   'onboardingCompleted',
   'onlineStatus',
+  'isOnline',
   'lastActiveAt',
+  'lastSeen',
   'createdAt',
   'updatedAt'
 ]);
@@ -275,67 +277,136 @@ export function sanitizeString(input: string, maxLength: number): string {
   return (input || '').trim().slice(0, maxLength);
 }
 
+export function getDirectChatId(uid1: string, uid2: string): string {
+  const sorted = [String(uid1 || '').trim(), String(uid2 || '').trim()].sort();
+  return `dm_${sorted[0]}_${sorted[1]}`;
+}
+
 export function formatDeadlineCountdown(deadlineDateStr: string, nowMs: number = Date.now()): {
   label: string;
   isUrgent: boolean;
   isPast: boolean;
   daysLeft: number;
+  diffMs: number;
 } | null {
   if (!deadlineDateStr || !deadlineDateStr.trim()) {
     return null;
   }
-  const targetMs = Date.parse(deadlineDateStr);
+  const trimmed = deadlineDateStr.trim();
+  // If user selected a date-only string (YYYY-MM-DD), treat the deadline as the end of that day (23:59:59)
+  const normalizedDateStr = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+    ? `${trimmed}T23:59:59`
+    : trimmed;
+  const targetMs = Date.parse(normalizedDateStr);
   if (Number.isNaN(targetMs)) {
     return null;
   }
   const diffMs = targetMs - nowMs;
-  const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  if (daysLeft < 0) {
+  if (diffMs <= 0) {
     return {
-      label: 'Deadline passed',
+      label: 'Deadline over',
       isUrgent: false,
       isPast: true,
-      daysLeft
+      daysLeft: -1,
+      diffMs
     };
   }
-  if (daysLeft === 0) {
-    return {
-      label: 'Due today',
-      isUrgent: true,
-      isPast: false,
-      daysLeft: 0
-    };
+
+  const totalMinutes = Math.floor(diffMs / (1000 * 60));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  let label: string;
+  if (days >= 1) {
+    label = `${days}d ${hours}h ${minutes}m left`;
+  } else if (hours >= 1) {
+    label = `${hours}h ${minutes}m left`;
+  } else {
+    const mins = Math.max(1, minutes);
+    label = `${mins}m left`;
   }
-  if (daysLeft === 1) {
-    return {
-      label: '1 day left',
-      isUrgent: true,
-      isPast: false,
-      daysLeft: 1
-    };
-  }
+
   return {
-    label: `${daysLeft} days left`,
-    isUrgent: daysLeft <= 3,
+    label,
+    isUrgent: days < 3,
     isPast: false,
-    daysLeft
+    daysLeft: days,
+    diffMs
   };
 }
 
-export function formatRelativeTime(timestamp: unknown, nowMs: number = Date.now()): string {
-  if (!timestamp) return 'Just now';
-  let ms = 0;
-  if (typeof timestamp === 'object' && timestamp !== null && 'toMillis' in timestamp && typeof (timestamp as { toMillis: () => number }).toMillis === 'function') {
-    ms = (timestamp as { toMillis: () => number }).toMillis();
-  } else if (typeof timestamp === 'object' && timestamp !== null && 'seconds' in timestamp && typeof (timestamp as { seconds: number }).seconds === 'number') {
-    ms = (timestamp as { seconds: number }).seconds * 1000;
-  } else if (timestamp instanceof Date) {
-    ms = timestamp.getTime();
-  } else if (typeof timestamp === 'number') {
-    ms = timestamp;
-  } else if (typeof timestamp === 'string') {
-    ms = Date.parse(timestamp);
+export function extractTimestampMs(timestamp: unknown): number {
+  if (!timestamp) return 0;
+  if (
+    typeof timestamp === 'object' &&
+    timestamp !== null &&
+    'toMillis' in timestamp &&
+    typeof (timestamp as { toMillis: () => number }).toMillis === 'function'
+  ) {
+    return (timestamp as { toMillis: () => number }).toMillis();
   }
+  if (
+    typeof timestamp === 'object' &&
+    timestamp !== null &&
+    'seconds' in timestamp &&
+    typeof (timestamp as { seconds: number }).seconds === 'number'
+  ) {
+    return (timestamp as { seconds: number }).seconds * 1000;
+  }
+  if (timestamp instanceof Date) {
+    return timestamp.getTime();
+  }
+  if (typeof timestamp === 'number') {
+    return timestamp;
+  }
+  if (typeof timestamp === 'string') {
+    const parsed = Date.parse(timestamp);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+export function formatPresenceStatus(
+  profile: {
+    onlineStatus?: 'online' | 'offline' | string;
+    isOnline?: boolean;
+    lastActiveAt?: unknown;
+    lastSeen?: unknown;
+  },
+  nowMs: number = Date.now()
+): { isOnline: boolean; statusText: string } {
+  const lastSeenMs = extractTimestampMs(profile.lastSeen ?? profile.lastActiveAt);
+  const explicitlyOnline =
+    typeof profile.isOnline === 'boolean'
+      ? profile.isOnline
+      : profile.onlineStatus === 'online';
+  // Consider active if marked online and heartbeat is within the last 3 minutes (or timestamp just written)
+  const isFresh = lastSeenMs === 0 || nowMs - lastSeenMs <= 3 * 60 * 1000;
+  const activeNow = explicitlyOnline && isFresh;
+
+  if (activeNow) {
+    return { isOnline: true, statusText: 'Active now' };
+  }
+
+  if (!lastSeenMs) {
+    return { isOnline: false, statusText: 'Last seen recently' };
+  }
+
+  const diffMin = Math.max(1, Math.floor((nowMs - lastSeenMs) / (1000 * 60)));
+  if (diffMin < 60) {
+    return { isOnline: false, statusText: `Last seen ${diffMin} min ago` };
+  }
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) {
+    return { isOnline: false, statusText: `Last seen ${diffHr}h ago` };
+  }
+  const diffDays = Math.floor(diffHr / 24);
+  return { isOnline: false, statusText: `Last seen ${diffDays}d ago` };
+}
+
+export function formatRelativeTime(timestamp: unknown, nowMs: number = Date.now()): string {
+  const ms = extractTimestampMs(timestamp);
   if (!ms || Number.isNaN(ms)) return 'Just now';
 
   const diffSec = Math.max(0, Math.floor((nowMs - ms) / 1000));

@@ -158,9 +158,9 @@ export default function App() {
     return () => unsub();
   }, [isAutostart]);
 
-  // Attach Firestore real-time listeners ONLY when authenticated with a verified user
+  // Attach Firestore real-time listeners when authenticated
   useEffect(() => {
-    if (!authReady || !currentUser || !currentUser.emailVerified) {
+    if (!authReady || !currentUser) {
       if (!isAutostart) setPostsLoading(false);
       return;
     }
@@ -191,7 +191,7 @@ export default function App() {
       (err) => handleFirestoreError(err, OperationType.GET, `profiles/${uid}`)
     );
 
-    // 3. Circle Members listener
+    // 3. Circle Members listener (all authenticated members can read presence & profile info)
     const unsubMembers = onSnapshot(
       query(collection(db, 'profiles'), where('circleId', '==', 'cohert')),
       (snap) => {
@@ -262,6 +262,58 @@ export default function App() {
     };
   }, [authReady, currentUser, isAutostart]);
 
+  // Real-time user presence (login, heartbeat, visibilitychange, and tab close)
+  useEffect(() => {
+    if (!currentUser || !myProfile?.userId) return;
+    const uid = myProfile.userId;
+    const profileRef = doc(db, 'profiles', uid);
+
+    const setPresence = (online: boolean) => {
+      updateDoc(profileRef, {
+        onlineStatus: online ? 'online' : 'offline',
+        isOnline: online,
+        lastActiveAt: serverTimestamp(),
+        lastSeen: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }).catch(() => {
+        // Ignore transient network errors during unload
+      });
+    };
+
+    // Mark online on login / mount
+    setPresence(true);
+
+    // Regular heartbeat every 45 seconds while tab is visible
+    const heartbeatInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setPresence(true);
+      }
+    }, 45000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setPresence(true);
+      } else {
+        setPresence(false);
+      }
+    };
+
+    const handlePageUnload = () => {
+      setPresence(false);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageUnload);
+    window.addEventListener('beforeunload', handlePageUnload);
+
+    return () => {
+      window.clearInterval(heartbeatInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageUnload);
+      window.removeEventListener('beforeunload', handlePageUnload);
+    };
+  }, [currentUser, myProfile?.userId]);
+
   const handleToggleBookmark = async (postId: string, currentlyBookmarked: boolean) => {
     if (!myProfile) return;
     const bookmarkId = `${myProfile.userId}_${postId}`;
@@ -298,7 +350,9 @@ export default function App() {
       try {
         await updateDoc(doc(db, 'profiles', myProfile.userId), {
           onlineStatus: 'offline',
+          isOnline: false,
           lastActiveAt: serverTimestamp(),
+          lastSeen: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
       } catch {
@@ -321,7 +375,7 @@ export default function App() {
 
   // Strict privacy gate: nobody can see anything without logging in
   const isAuthenticatedMember =
-    (Boolean(currentUser && currentUser.emailVerified) && Boolean(myProfile)) ||
+    (Boolean(currentUser) && Boolean(myProfile)) ||
     (isAutostart && Boolean(myProfile));
 
   if (!isAuthenticatedMember || !myProfile) {
@@ -549,6 +603,7 @@ export default function App() {
                       <ChatWindow
                         chat={activeChatObj}
                         currentUserProfile={myProfile}
+                        circleMembers={circleMembers}
                         onBackMobile={() => setActiveChatId(null)}
                         isPreviewMode={isAutostart && !currentUser}
                       />
